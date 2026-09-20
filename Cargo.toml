@@ -1,0 +1,24 @@
+[package]
+name = "yamlq"
+version = "0.1.0"
+edition = "2021"
+description = "A yq-style YAML query/transform CLI — get, set, and delete values in a YAML file with a dot/bracket path syntax"
+license = "MIT"
+authors = ["Animesh Raj <animesh080808@gmail.com>"]
+repository = "https://github.com/itsarraj/yamlq"
+readme = "README.md"
+keywords = ["yaml", "cli", "query", "yq"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "yamlq"
+path = "src/lib.rs"
+
+[[bin]]
+name = "yamlq"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+serde_yaml = "0.9"
