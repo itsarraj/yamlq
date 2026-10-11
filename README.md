@@ -4,6 +4,12 @@ A `yq`-style YAML query/transform CLI — the `jq` idea, but for YAML
 instead of JSON, with a plain dot/bracket path syntax instead of `jq`'s
 own filter language.
 
+## Installation
+
+```sh
+cargo install --path .
+```
+
 ## Usage
 
 ```bash
