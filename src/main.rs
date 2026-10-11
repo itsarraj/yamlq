@@ -71,18 +71,18 @@ fn main() -> anyhow::Result<()> {
 fn load(file: &Path) -> anyhow::Result<Value> {
     let text = std::fs::read_to_string(file)
         .map_err(|e| anyhow::anyhow!("reading {}: {e}", file.display()))?;
-    serde_yaml::from_str(&text)
+    serde_yaml::from_str_value_preserve(&text)
         .map_err(|e| anyhow::anyhow!("parsing {} as YAML: {e}", file.display()))
 }
 
 fn print_value(v: &Value) {
     match v {
-        Value::String(s) => println!("{s}"),
-        Value::Bool(b) => println!("{b}"),
-        Value::Null => println!("null"),
-        Value::Number(n) => println!("{n}"),
+        Value::String(s, _) => println!("{s}"),
+        Value::Bool(b, _) => println!("{b}"),
+        Value::Null(_) => println!("null"),
+        Value::Number(n, _) => println!("{n}"),
+        Value::Alias(a) => println!("*{a}"),
         other => {
-            // Sequences/maps print as a YAML block, same shape as the source.
             let rendered =
                 serde_yaml::to_string(other).expect("re-serializing an already-parsed value");
             print!("{rendered}");
@@ -109,13 +109,9 @@ fn cmd_set(
     let segments = path::parse(raw_path).map_err(|e| anyhow::anyhow!("{raw_path}: {e}"))?;
 
     let new_value = if raw {
-        Value::String(raw_value.to_string())
+        Value::String(raw_value.to_string(), None)
     } else {
-        // Type-infer like a YAML scalar would: "true" -> bool, "12" ->
-        // number, "null"/"~" -> null, anything else stays a string. Falls
-        // back to a literal string if it's not valid YAML at all (rather
-        // than erroring on a value the user clearly meant as plain text).
-        serde_yaml::from_str(raw_value).unwrap_or_else(|_| Value::String(raw_value.to_string()))
+        serde_yaml::from_str_value_preserve(raw_value).unwrap_or_else(|_| Value::String(raw_value.to_string(), None))
     };
 
     ops::set(&mut doc, &segments, new_value).map_err(|e| anyhow::anyhow!("{raw_path}: {e}"))?;

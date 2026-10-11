@@ -22,13 +22,14 @@ impl std::error::Error for OpError {}
 
 fn type_name(v: &Value) -> &'static str {
     match v {
-        Value::Null => "null",
-        Value::Bool(_) => "bool",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Sequence(_) => "array",
-        Value::Mapping(_) => "map",
+        Value::Null(_) => "null",
+        Value::Bool(..) => "bool",
+        Value::Number(..) => "number",
+        Value::String(..) => "string",
+        Value::Sequence(..) => "array",
+        Value::Mapping(..) => "map",
         Value::Tagged(_) => "tagged value",
+        Value::Alias(_) => "alias",
     }
 }
 
@@ -47,6 +48,11 @@ pub fn get<'a>(root: &'a Value, segments: &[Segment]) -> Result<&'a Value, OpErr
                     seq.len()
                 ))
             })?,
+            (Value::Alias(a), seg) => {
+                return Err(OpError(format!(
+                    "encountered alias '*{a}' — yamlq does not automatically resolve aliases for get operations yet"
+                )));
+            }
             (other, seg) => {
                 return Err(OpError(format!(
                     "cannot look up {seg} in a {} value",
@@ -72,6 +78,11 @@ fn get_mut<'a>(root: &'a mut Value, segments: &[Segment]) -> Result<&'a mut Valu
                         "index {i} out of bounds (array has {len} element(s))"
                     ))
                 })?
+            }
+            (Value::Alias(a), seg) => {
+                return Err(OpError(format!(
+                    "encountered alias '*{a}' — yamlq cannot mutate through aliases"
+                )));
             }
             (other, seg) => {
                 return Err(OpError(format!(
@@ -99,7 +110,7 @@ pub fn set(root: &mut Value, segments: &[Segment], new_value: Value) -> Result<(
 
     match head {
         Segment::Key(k) => {
-            if matches!(root, Value::Null) {
+            if matches!(root, Value::Null(_)) {
                 *root = Value::Mapping(Mapping::new());
             }
             let Value::Mapping(map) = root else {
@@ -109,12 +120,12 @@ pub fn set(root: &mut Value, segments: &[Segment], new_value: Value) -> Result<(
                 )));
             };
             if rest.is_empty() {
-                map.insert(Value::String(k.clone()), new_value);
+                map.insert(Value::String(k.clone(), None), new_value);
                 return Ok(());
             }
-            let entry_value = match map.entry(Value::String(k.clone())) {
+            let entry_value = match map.entry(Value::String(k.clone(), None)) {
                 Entry::Occupied(o) => o.into_mut(),
-                Entry::Vacant(v) => v.insert(Value::Null),
+                Entry::Vacant(v) => v.insert(Value::Null(None)),
             };
             set(entry_value, rest, new_value)
         }
@@ -179,14 +190,14 @@ mod tests {
     use crate::path::parse;
 
     fn doc(yaml: &str) -> Value {
-        serde_yaml::from_str(yaml).unwrap()
+        serde_yaml::from_str_value_preserve(yaml).unwrap()
     }
 
     #[test]
     fn get_nested_scalar() {
         let d = doc("a:\n  b:\n    c: 42\n");
         let v = get(&d, &parse(".a.b.c").unwrap()).unwrap();
-        assert_eq!(v, &Value::Number(42.into()));
+        assert_eq!(v, &Value::Number(42.into(), None));
     }
 
     #[test]
@@ -227,7 +238,7 @@ mod tests {
     #[test]
     fn set_existing_scalar() {
         let mut d = doc("a:\n  b: 1\n");
-        set(&mut d, &parse(".a.b").unwrap(), Value::Number(2.into())).unwrap();
+        set(&mut d, &parse(".a.b").unwrap(), Value::Number(2.into(), None)).unwrap();
         assert_eq!(get(&d, &parse(".a.b").unwrap()).unwrap().as_i64(), Some(2));
     }
 
@@ -237,7 +248,7 @@ mod tests {
         set(
             &mut d,
             &parse(".a.b.c").unwrap(),
-            Value::String("deep".into()),
+            Value::String("deep".into(), None),
         )
         .unwrap();
         assert_eq!(
@@ -252,7 +263,7 @@ mod tests {
         set(
             &mut d,
             &parse(".items[0]").unwrap(),
-            Value::String("ONE".into()),
+            Value::String("ONE".into(), None),
         )
         .unwrap();
         assert_eq!(
@@ -272,7 +283,7 @@ mod tests {
         let err = set(
             &mut d,
             &parse(".items[3]").unwrap(),
-            Value::String("x".into()),
+            Value::String("x".into(), None),
         )
         .unwrap_err();
         assert!(err.0.contains("out of bounds"));
@@ -284,7 +295,7 @@ mod tests {
         set(
             &mut d,
             &parse(".").unwrap(),
-            Value::String("replaced".into()),
+            Value::String("replaced".into(), None),
         )
         .unwrap();
         assert_eq!(d.as_str(), Some("replaced"));
